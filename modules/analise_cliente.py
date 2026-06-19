@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from services import analytics
+from services.comercial import compras_e_orcamentos_cliente
 from services.db import (get_connection, listar_agendamentos, listar_historico_cliente,
                          listar_observacoes, marcar_ja_liguei, salvar_agendamento,
                          salvar_observacao, obter_whatsapp_vendedora,
@@ -56,6 +57,7 @@ def render():
 
     vendas = _vendas(cliente_id)
     orcamentos = _orcamentos(cliente_id)
+    compras_orcamentos = compras_e_orcamentos_cliente(cliente_id)
     observacoes = listar_observacoes(cliente_id)
     agendamentos = listar_agendamentos(cliente_id)
     historico = listar_historico_cliente(cliente_id)
@@ -82,6 +84,23 @@ def render():
         "email": cliente.get("email"),
         "vendedor": cliente.get("vendedor"),
     })
+
+    st.subheader("O que este cliente compra e orça")
+    tab_compras_cliente, tab_orcamentos_cliente = st.tabs(["Compras", "Orçamentos"])
+    with tab_compras_cliente:
+        compras_df = compras_orcamentos["compras"]
+        if compras_df.empty:
+            st.info("Nenhuma compra encontrada para este cliente.")
+        else:
+            colunas = [c for c in ["data", "codigo", "valor_total", "status", "vendedor", "produtos"] if c in compras_df.columns]
+            st.dataframe(compras_df[colunas], use_container_width=True, hide_index=True)
+    with tab_orcamentos_cliente:
+        orc_df = compras_orcamentos["orcamentos"]
+        if orc_df.empty:
+            st.info("Nenhum orçamento encontrado para este cliente.")
+        else:
+            colunas = [c for c in ["data", "codigo", "valor_total", "status", "vendedor", "produtos", "observacoes"] if c in orc_df.columns]
+            st.dataframe(orc_df[colunas], use_container_width=True, hide_index=True)
 
     st.subheader("Sugestão de recompra")
     st.write("Produto sugerido:", sugestao.get("produto_sugerido") or "Sem sugestão segura")

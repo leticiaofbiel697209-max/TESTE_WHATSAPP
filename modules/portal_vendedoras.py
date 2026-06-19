@@ -50,7 +50,16 @@ def render():
         vendedores = [
             r[0]
             for r in conn.execute(
-                "SELECT DISTINCT vendedor FROM clientes WHERE vendedor IS NOT NULL AND vendedor <> '' ORDER BY vendedor"
+                """
+                SELECT vendedor FROM (
+                    SELECT DISTINCT vendedor FROM clientes WHERE vendedor IS NOT NULL AND vendedor <> ''
+                    UNION
+                    SELECT DISTINCT vendedor FROM orcamentos WHERE vendedor IS NOT NULL AND vendedor <> ''
+                    UNION
+                    SELECT DISTINCT vendedor FROM vendas WHERE vendedor IS NOT NULL AND vendedor <> ''
+                )
+                ORDER BY vendedor
+                """
             ).fetchall()
         ]
     vendedor = st.selectbox("Vendedor responsável", vendedores) if vendedores else None
@@ -59,8 +68,24 @@ def render():
         return
 
     with get_connection() as conn:
-        clientes = pd.read_sql_query("SELECT * FROM clientes WHERE vendedor=? ORDER BY nome", conn, params=(vendedor,))
-        orc = pd.read_sql_query("SELECT * FROM orcamentos WHERE vendedor=? ORDER BY data DESC", conn, params=(vendedor,))
+        clientes = pd.read_sql_query("""
+            SELECT DISTINCT c.*
+            FROM clientes c
+            LEFT JOIN orcamentos o ON o.cliente_id=c.id
+            LEFT JOIN vendas v ON v.cliente_id=c.id
+            WHERE c.vendedor=? OR o.vendedor=? OR v.vendedor=?
+            ORDER BY c.nome
+        """, conn, params=(vendedor, vendedor, vendedor))
+        orc = pd.read_sql_query("""
+            SELECT
+                o.*,
+                COALESCE(c.nome_fantasia, c.nome) AS cliente,
+                COALESCE(c.celular, c.telefone) AS telefone
+            FROM orcamentos o
+            LEFT JOIN clientes c ON c.id=o.cliente_id
+            WHERE COALESCE(NULLIF(o.vendedor, ''), c.vendedor)=?
+            ORDER BY o.data DESC
+        """, conn, params=(vendedor,))
 
     st.subheader("Carteira")
     st.dataframe(clientes, use_container_width=True)
@@ -68,7 +93,7 @@ def render():
     st.dataframe(orc, use_container_width=True)
 
     if clientes.empty:
-        st.info("Essa vendedora ainda não tem clientes sincronizados.")
+        st.info("Essa vendedora ainda não tem clientes vinculados na base sincronizada.")
         return
 
     cliente_id = st.selectbox("Cliente", clientes["id"].astype(str).tolist())
