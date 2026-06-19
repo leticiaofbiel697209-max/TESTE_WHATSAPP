@@ -94,6 +94,29 @@ def init_db():
                 FOREIGN KEY(cliente_id) REFERENCES clientes(id)
             )
         """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS vendedores_contatos (
+                nome TEXT PRIMARY KEY,
+                whatsapp TEXT,
+                ativo INTEGER DEFAULT 1,
+                atualizado_em TEXT
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS mensagens_watidy (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cliente_id TEXT,
+                vendedor TEXT,
+                destino_tipo TEXT,
+                numero TEXT,
+                mensagem TEXT,
+                status TEXT,
+                resposta_json TEXT,
+                erro TEXT,
+                criado_em TEXT,
+                FOREIGN KEY(cliente_id) REFERENCES clientes(id)
+            )
+        """)
         conn.commit()
 
 
@@ -238,12 +261,88 @@ def marcar_ja_liguei(cliente_id: str, origem: str = "CRM", usuario: str = "usuar
         conn.commit()
 
 
+def salvar_vendedora_contato(nome: str, whatsapp: str, ativo: bool = True):
+    nome = (nome or "").strip()
+    whatsapp = (whatsapp or "").strip()
+    if not nome:
+        raise ValueError("Informe o nome da vendedora.")
+    with get_connection() as conn:
+        conn.execute("""
+            INSERT INTO vendedores_contatos (nome, whatsapp, ativo, atualizado_em)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(nome) DO UPDATE SET
+                whatsapp=excluded.whatsapp,
+                ativo=excluded.ativo,
+                atualizado_em=excluded.atualizado_em
+        """, (nome, whatsapp, 1 if ativo else 0, _now()))
+        conn.commit()
+
+
+def listar_vendedoras_contatos() -> List[dict]:
+    with get_connection() as conn:
+        rows = conn.execute("SELECT * FROM vendedores_contatos ORDER BY nome").fetchall()
+        return [dict(r) for r in rows]
+
+
+def obter_whatsapp_vendedora(nome: str) -> str:
+    if not nome:
+        return ""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT whatsapp FROM vendedores_contatos WHERE nome=? AND ativo=1",
+            (nome,),
+        ).fetchone()
+        return str(row["whatsapp"] or "") if row else ""
+
+
+def registrar_mensagem_watidy(
+    cliente_id: str,
+    vendedor: str,
+    destino_tipo: str,
+    numero: str,
+    mensagem: str,
+    status: str,
+    resposta: Any = None,
+    erro: str = "",
+):
+    with get_connection() as conn:
+        conn.execute("""
+            INSERT INTO mensagens_watidy
+                (cliente_id, vendedor, destino_tipo, numero, mensagem, status, resposta_json, erro, criado_em)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            cliente_id,
+            vendedor,
+            destino_tipo,
+            numero,
+            mensagem,
+            status,
+            json.dumps(resposta or {}, ensure_ascii=False, default=str),
+            erro,
+            _now(),
+        ))
+        conn.commit()
+
+
+def listar_mensagens_watidy(cliente_id: Optional[str] = None) -> List[dict]:
+    with get_connection() as conn:
+        if cliente_id:
+            rows = conn.execute(
+                "SELECT * FROM mensagens_watidy WHERE cliente_id=? ORDER BY criado_em DESC",
+                (cliente_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM mensagens_watidy ORDER BY criado_em DESC").fetchall()
+        return [dict(r) for r in rows]
+
+
 def listar_historico_cliente(cliente_id: str) -> Dict[str, List[dict]]:
     with get_connection() as conn:
         return {
             "observacoes": [dict(r) for r in conn.execute("SELECT * FROM observacoes WHERE cliente_id=? ORDER BY criado_em DESC", (cliente_id,)).fetchall()],
             "agendamentos": [dict(r) for r in conn.execute("SELECT * FROM agendamentos WHERE cliente_id=? ORDER BY data_retorno ASC", (cliente_id,)).fetchall()],
             "contatos": [dict(r) for r in conn.execute("SELECT * FROM contatos WHERE cliente_id=? ORDER BY criado_em DESC", (cliente_id,)).fetchall()],
+            "mensagens_watidy": [dict(r) for r in conn.execute("SELECT * FROM mensagens_watidy WHERE cliente_id=? ORDER BY criado_em DESC", (cliente_id,)).fetchall()],
             "orcamentos": [dict(r) for r in conn.execute("SELECT * FROM orcamentos WHERE cliente_id=? ORDER BY data DESC", (cliente_id,)).fetchall()],
             "vendas": [dict(r) for r in conn.execute("SELECT * FROM vendas WHERE cliente_id=? ORDER BY data DESC", (cliente_id,)).fetchall()],
         }
