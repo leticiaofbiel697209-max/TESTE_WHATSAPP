@@ -44,8 +44,22 @@ No Streamlit Cloud, use os mesmos nomes em **Settings > Secrets**.
 
 1. Vá em **Configurações** e sincronize os dados reais do GestãoClick.
 2. Ainda em **Configurações**, cadastre o WhatsApp das vendedoras.
-3. Use **CRM**, **Portal das Vendedoras** ou **Análise de Cliente** para enviar mensagens via Watidy.
-4. Cada envio para cliente ou vendedora fica salvo no histórico Watidy do cliente.
+3. Use **CRM e Orçamentos** para trabalhar clientes com orçamento aberto há 2 dias ou mais.
+4. Use **Análise de Cliente** para buscar um cliente e ver compras, orçamentos, produtos, histórico e mensagem.
+5. Use **Portal das Vendedoras** para filtrar carteira e orçamentos por vendedora.
+6. Cada envio para cliente ou vendedora fica salvo no histórico Watidy do cliente.
+
+## Relatório diário das 08:00
+
+O app tenta enviar automaticamente, uma vez por dia após 08:00, o relatório de clientes que cada vendedora precisa ligar.
+
+Regras do relatório:
+
+- orçamento aberto com 2 dias ou mais;
+- cliente identificado, telefone, vendedora, valor e produtos quando disponíveis;
+- envio agrupado por vendedora para o WhatsApp cadastrado em **Configurações**.
+
+Importante: em Streamlit, o envio automático roda quando o app está ativo depois das 08:00. Se o app estiver desligado, use o botão **Enviar relatório diário agora** dentro de **CRM e Orçamentos**.
 
 Campos opcionais do Watidy:
 
