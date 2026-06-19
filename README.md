@@ -1,45 +1,30 @@
 # Central Comercial Novaprint
 
-Sistema web em Python + Streamlit para operação comercial da Novaprint, conectado ao GestãoClick, preparado para waTidy e OpenAI.
+Sistema web em Python + Streamlit para operação comercial da Novaprint, conectado ao GestãoClick, Watidy e OpenAI.
 
-## 1. Como instalar
+## Como instalar
 
 ```bash
-git clone SEU_REPOSITORIO
-cd central_comercial_novaprint
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-No Linux/Mac:
-
-```bash
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-## 2. Como rodar local
+## Como rodar local
 
 ```bash
 streamlit run app.py
 ```
 
-Main file path correto para Streamlit Cloud:
+Main file path para Streamlit Cloud:
 
 ```text
 app.py
 ```
 
-## 3. Como configurar `.env`
+## Configuração
 
-Copie o arquivo:
-
-```bash
-copy .env.example .env
-```
-
-Preencha:
+Copie `.env.example` para `.env` e preencha:
 
 ```env
 GESTAOCLICK_ACCESS_TOKEN=
@@ -48,59 +33,28 @@ GESTAOCLICK_STORE_ID=
 OPENAI_API_KEY=
 WATIDY_API_URL=
 WATIDY_API_TOKEN=
+WATIDY_SEND_PATH=
+WATIDY_NUMBER_FIELD=numero
+WATIDY_MESSAGE_FIELD=mensagem
 ```
 
-As chaves nunca ficam no código.
+No Streamlit Cloud, use os mesmos nomes em **Settings > Secrets**.
 
-## 4. Como configurar secrets no Streamlit Cloud
+## Fluxo comercial com Watidy
 
-No Streamlit Cloud, abra o app, vá em **Settings > Secrets** e configure:
+1. Vá em **Configurações** e sincronize os dados reais do GestãoClick.
+2. Ainda em **Configurações**, cadastre o WhatsApp das vendedoras.
+3. Use **CRM**, **Portal das Vendedoras** ou **Análise de Cliente** para enviar mensagens via Watidy.
+4. Cada envio para cliente ou vendedora fica salvo no histórico Watidy do cliente.
 
-```toml
-GESTAOCLICK_ACCESS_TOKEN=""
-GESTAOCLICK_SECRET_TOKEN=""
-GESTAOCLICK_STORE_ID=""
-OPENAI_API_KEY=""
-WATIDY_API_URL=""
-WATIDY_API_TOKEN=""
-```
+Campos opcionais do Watidy:
 
-## 5. Como sincronizar GestãoClick
+- `WATIDY_SEND_PATH`: caminho do endpoint de envio, caso `WATIDY_API_URL` seja apenas a URL base.
+- `WATIDY_NUMBER_FIELD`: nome do campo de telefone no JSON. Padrão: `numero`.
+- `WATIDY_MESSAGE_FIELD`: nome do campo de mensagem no JSON. Padrão: `mensagem`.
 
-1. Abra o sistema.
-2. Vá em **Configurações**.
-3. Clique em **Testar GestãoClick**.
-4. Clique em **Sincronizar dados reais agora**.
-5. O sistema buscará clientes, vendas e orçamentos reais e salvará no SQLite local.
+## Observações
 
-## 6. Como testar waTidy
-
-1. Configure `WATIDY_API_URL` e `WATIDY_API_TOKEN`.
-2. Vá em **Configurações**.
-3. Clique em **Testar waTidy**.
-4. O envio de mensagem só acontece manualmente, com clique humano, na tela de Análise de Cliente.
-
-## 7. Como publicar no GitHub
-
-```bash
-git init
-git add .
-git commit -m "Central Comercial Novaprint inicial"
-git branch -M main
-git remote add origin URL_DO_REPOSITORIO
-git push -u origin main
-```
-
-Depois, no Streamlit Cloud, selecione o repositório e use:
-
-```text
-Main file path: app.py
-```
-
-## 8. Avisos importantes
-
-- O sistema não possui dados fictícios.
-- O sistema não usa clientes de exemplo.
-- O sistema não usa JSON fixo como fonte principal.
-- A análise de cliente depende de cliente real sincronizado do GestãoClick.
-- Observações, agendamentos, histórico de contatos e status "Já Liguei" são compartilhados entre módulos pelo mesmo banco SQLite.
+- O sistema não usa clientes fictícios.
+- A análise depende de dados reais sincronizados do GestãoClick.
+- Observações, agendamentos, contatos e mensagens Watidy são compartilhados entre os módulos pelo mesmo SQLite local.

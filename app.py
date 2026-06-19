@@ -1,12 +1,13 @@
 import streamlit as st
-from services.db import init_db
+
 from modules import analise_cliente, base_clientes, churn, configuracoes, crm, dashboard, orcamentos, portal_vendedoras
+from services.db import init_db
 
 st.set_page_config(page_title="Central Comercial Novaprint", layout="wide")
 init_db()
 
 st.sidebar.title("Central Comercial Novaprint")
-st.sidebar.caption("CRM CEO integrado ao GestãoClick")
+st.sidebar.caption("CRM CEO integrado ao GestãoClick e Watidy")
 menu = st.sidebar.radio("Menu", [
     "Dashboard CEO",
     "Análise de Cliente",
