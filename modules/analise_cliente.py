@@ -6,7 +6,9 @@ import streamlit as st
 from services import analytics
 from services.db import (get_connection, listar_agendamentos, listar_historico_cliente,
                          listar_observacoes, marcar_ja_liguei, salvar_agendamento,
-                         salvar_observacao)
+                         salvar_observacao, obter_whatsapp_vendedora,
+                         registrar_mensagem_watidy)
+from services.mensagens import mensagem_vendedora_padrao
 from services.openai_service import gerar_mensagem_whatsapp
 from services.watidy_api import enviar_mensagem
 
@@ -128,9 +130,63 @@ def render():
         numero = st.text_input("Número para envio", value=cliente.get("celular") or cliente.get("telefone") or "")
         if st.button("Enviar via waTidy agora"):
             try:
-                enviar_mensagem(numero, mensagem)
+                resposta = enviar_mensagem(numero, mensagem)
+                registrar_mensagem_watidy(
+                    cliente_id=cliente_id,
+                    vendedor=cliente.get("vendedor") or "",
+                    destino_tipo="cliente",
+                    numero=numero,
+                    mensagem=mensagem,
+                    status="enviado",
+                    resposta=resposta,
+                )
                 st.success("Mensagem enviada pelo waTidy.")
             except Exception as e:
+                registrar_mensagem_watidy(
+                    cliente_id=cliente_id,
+                    vendedor=cliente.get("vendedor") or "",
+                    destino_tipo="cliente",
+                    numero=numero,
+                    mensagem=mensagem,
+                    status="erro",
+                    erro=str(e),
+                )
+                st.error(str(e))
+
+        st.divider()
+        st.markdown("**Avisar vendedora responsável**")
+        numero_vendedora = st.text_input(
+            "Número da vendedora",
+            value=obter_whatsapp_vendedora(cliente.get("vendedor") or ""),
+        )
+        mensagem_vendedora = st.text_area(
+            "Mensagem para vendedora",
+            value=mensagem_vendedora_padrao(cliente, mensagem),
+            height=150,
+        )
+        if st.button("Enviar aviso para vendedora via waTidy"):
+            try:
+                resposta = enviar_mensagem(numero_vendedora, mensagem_vendedora)
+                registrar_mensagem_watidy(
+                    cliente_id=cliente_id,
+                    vendedor=cliente.get("vendedor") or "",
+                    destino_tipo="vendedora",
+                    numero=numero_vendedora,
+                    mensagem=mensagem_vendedora,
+                    status="enviado",
+                    resposta=resposta,
+                )
+                st.success("Aviso enviado para a vendedora pelo waTidy.")
+            except Exception as e:
+                registrar_mensagem_watidy(
+                    cliente_id=cliente_id,
+                    vendedor=cliente.get("vendedor") or "",
+                    destino_tipo="vendedora",
+                    numero=numero_vendedora,
+                    mensagem=mensagem_vendedora,
+                    status="erro",
+                    erro=str(e),
+                )
                 st.error(str(e))
 
     with tab4:
