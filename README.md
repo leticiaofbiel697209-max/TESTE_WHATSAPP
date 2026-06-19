@@ -36,6 +36,8 @@ WATIDY_API_TOKEN=
 WATIDY_SEND_PATH=
 WATIDY_NUMBER_FIELD=numero
 WATIDY_MESSAGE_FIELD=mensagem
+WATIDY_AUTH_HEADER=Authorization
+WATIDY_TOKEN_PREFIX=Bearer
 ```
 
 No Streamlit Cloud, use os mesmos nomes em **Settings > Secrets**.
@@ -66,6 +68,10 @@ Campos opcionais do Watidy:
 - `WATIDY_SEND_PATH`: caminho do endpoint de envio, caso `WATIDY_API_URL` seja apenas a URL base.
 - `WATIDY_NUMBER_FIELD`: nome do campo de telefone no JSON. Padrão: `numero`.
 - `WATIDY_MESSAGE_FIELD`: nome do campo de mensagem no JSON. Padrão: `mensagem`.
+- `WATIDY_AUTH_HEADER`: nome do cabeçalho do token. Padrão: `Authorization`.
+- `WATIDY_TOKEN_PREFIX`: prefixo do token. Padrão: `Bearer`.
+
+Se aparecer `Cannot POST /api/enviar-texto`, o servidor foi encontrado, mas a rota de envio está errada. Ajuste `WATIDY_API_URL` e `WATIDY_SEND_PATH` com a rota exata fornecida pelo Watidy e teste em **Configurações > Diagnóstico e envio de teste do Watidy**.
 
 ## Observações
 
