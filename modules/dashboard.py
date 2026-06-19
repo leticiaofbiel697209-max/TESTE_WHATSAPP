@@ -14,7 +14,7 @@ def _valor_total(df: pd.DataFrame) -> float:
 def render():
     st.title("Dashboard CEO")
     counts = contar_registros()
-    orc_ligar = orcamentos_para_ligar(dias_minimos=2)
+    orc_ligar = orcamentos_para_ligar(dias_minimos=2, dias_maximos=45)
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Clientes na base", counts["clientes"])

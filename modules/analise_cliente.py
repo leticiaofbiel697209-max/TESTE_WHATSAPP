@@ -1,4 +1,7 @@
 import json
+import re
+import unicodedata
+from difflib import SequenceMatcher
 
 import pandas as pd
 import streamlit as st
@@ -22,9 +25,32 @@ def _buscar_clientes_local(termo: str):
         rows = conn.execute("""
             SELECT * FROM clientes
             WHERE nome LIKE ? OR nome_fantasia LIKE ? OR cnpj LIKE ? OR cpf LIKE ?
+               OR telefone LIKE ? OR celular LIKE ? OR email LIKE ?
             ORDER BY nome LIMIT 50
-        """, (like, like, like, like)).fetchall()
-        return [dict(r) for r in rows]
+        """, (like, like, like, like, like, like, like)).fetchall()
+        encontrados = [dict(r) for r in rows]
+        if encontrados:
+            return encontrados
+        todos = [dict(r) for r in conn.execute("SELECT * FROM clientes ORDER BY atualizado_em DESC LIMIT 3000").fetchall()]
+
+    termo_norm = _normalizar_busca(termo)
+    candidatos = []
+    for cliente in todos:
+        texto = _normalizar_busca(" ".join(str(cliente.get(c) or "") for c in ("nome", "nome_fantasia", "cnpj", "cpf", "telefone", "celular", "email")))
+        if termo_norm in texto:
+            score = 1
+        else:
+            score = SequenceMatcher(None, termo_norm, texto[: max(len(termo_norm) + 20, 30)]).ratio()
+        if score >= 0.58:
+            cliente["_score_busca"] = round(score, 3)
+            candidatos.append(cliente)
+    return sorted(candidatos, key=lambda c: c.get("_score_busca", 0), reverse=True)[:50]
+
+
+def _normalizar_busca(valor: str) -> str:
+    texto = unicodedata.normalize("NFKD", str(valor or ""))
+    texto = "".join(ch for ch in texto if not unicodedata.combining(ch))
+    return re.sub(r"[^a-z0-9]+", " ", texto.lower()).strip()
 
 
 def _vendas(cliente_id: str):
@@ -41,7 +67,7 @@ def render():
     st.title("Análise de Cliente")
     st.warning("A análise só funciona após selecionar um cliente real sincronizado do GestãoClick.")
 
-    termo = st.text_input("Buscar por razão social, nome fantasia ou CNPJ")
+    termo = st.text_input("Buscar por razão social, fantasia, CNPJ, telefone ou e-mail")
     clientes = _buscar_clientes_local(termo)
     if not termo:
         st.info("Digite parte do nome, fantasia ou CNPJ para localizar um cliente real.")

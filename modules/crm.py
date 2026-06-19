@@ -121,9 +121,19 @@ def _painel_cliente(cliente):
     with tab_movimento:
         dados = compras_e_orcamentos_cliente(cliente_id)
         st.markdown("**Compras**")
-        st.dataframe(dados["compras"], use_container_width=True, hide_index=True)
+        compras = dados["compras"]
+        if not compras.empty:
+            colunas = [c for c in ["data", "codigo", "valor_total", "status", "vendedor", "produtos"] if c in compras.columns]
+            st.dataframe(compras[colunas].head(100), use_container_width=True, hide_index=True)
+        else:
+            st.info("Nenhuma compra encontrada.")
         st.markdown("**Orçamentos**")
-        st.dataframe(dados["orcamentos"], use_container_width=True, hide_index=True)
+        orcamentos = dados["orcamentos"]
+        if not orcamentos.empty:
+            colunas = [c for c in ["data", "codigo", "valor_total", "status", "vendedor", "produtos", "observacoes"] if c in orcamentos.columns]
+            st.dataframe(orcamentos[colunas].head(100), use_container_width=True, hide_index=True)
+        else:
+            st.info("Nenhum orçamento encontrado.")
 
 
 def render():
@@ -133,8 +143,10 @@ def render():
     tab_follow, tab_busca, tab_relatorio = st.tabs(["Para ligar hoje", "Buscar cliente", "Relatório diário 08:00"])
 
     with tab_follow:
-        vendedor_filtro = st.text_input("Filtrar vendedora", placeholder="Opcional")
-        df = orcamentos_para_ligar(dias_minimos=2, vendedor=vendedor_filtro.strip() or None)
+        c1, c2 = st.columns([2, 1])
+        vendedor_filtro = c1.text_input("Filtrar vendedora", placeholder="Opcional")
+        dias_maximos = c2.number_input("Até quantos dias em aberto", min_value=7, max_value=365, value=45, step=7)
+        df = orcamentos_para_ligar(dias_minimos=2, vendedor=vendedor_filtro.strip() or None, dias_maximos=int(dias_maximos))
         if df.empty:
             st.success("Nenhum orçamento aberto com 2 dias ou mais para este filtro.")
         else:
@@ -173,7 +185,11 @@ def render():
         if clientes.empty:
             st.warning("Nenhum cliente encontrado.")
         else:
-            st.dataframe(clientes, use_container_width=True, hide_index=True)
+            tabela = clientes.copy()
+            tabela["cliente"] = tabela["nome_fantasia"].fillna("").where(tabela["nome_fantasia"].fillna("") != "", tabela["nome"])
+            tabela["telefone_contato"] = tabela["celular"].fillna("").where(tabela["celular"].fillna("") != "", tabela["telefone"])
+            colunas = ["id", "cliente", "cnpj", "cpf", "telefone_contato", "email", "vendedor"]
+            st.dataframe(tabela[[c for c in colunas if c in tabela.columns]], use_container_width=True, hide_index=True)
             labels = {
                 f"{r.get('nome_fantasia') or r.get('nome')} | {r.get('cnpj') or r.get('cpf') or ''}": r
                 for r in clientes.to_dict("records")
@@ -182,7 +198,7 @@ def render():
             _painel_cliente(labels[selecionado])
 
     with tab_relatorio:
-        df = orcamentos_para_ligar(dias_minimos=2)
+        df = orcamentos_para_ligar(dias_minimos=2, dias_maximos=45)
         if df.empty:
             st.info("Nenhum cliente para incluir no relatório diário.")
         else:

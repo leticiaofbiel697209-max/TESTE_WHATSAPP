@@ -1,6 +1,7 @@
 import pandas as pd
 import streamlit as st
 
+from services.comercial import produtos_resumo
 from services.db import (
     get_connection,
     listar_mensagens_watidy,
@@ -57,6 +58,8 @@ def render():
                     SELECT DISTINCT vendedor FROM orcamentos WHERE vendedor IS NOT NULL AND vendedor <> ''
                     UNION
                     SELECT DISTINCT vendedor FROM vendas WHERE vendedor IS NOT NULL AND vendedor <> ''
+                    UNION
+                    SELECT DISTINCT nome AS vendedor FROM vendedores_contatos WHERE nome IS NOT NULL AND nome <> ''
                 )
                 ORDER BY vendedor
                 """
@@ -85,19 +88,35 @@ def render():
             LEFT JOIN clientes c ON c.id=o.cliente_id
             WHERE COALESCE(NULLIF(o.vendedor, ''), c.vendedor)=?
             ORDER BY o.data DESC
+            LIMIT 300
         """, conn, params=(vendedor,))
 
     st.subheader("Carteira")
-    st.dataframe(clientes, use_container_width=True)
+    carteira = clientes.copy()
+    if not carteira.empty:
+        carteira["cliente"] = carteira["nome_fantasia"].fillna("").where(carteira["nome_fantasia"].fillna("") != "", carteira["nome"])
+        carteira["telefone_contato"] = carteira["celular"].fillna("").where(carteira["celular"].fillna("") != "", carteira["telefone"])
+        carteira = carteira[["id", "cliente", "cnpj", "cpf", "telefone_contato", "email", "vendedor"]]
+    st.dataframe(carteira, use_container_width=True, hide_index=True)
     st.subheader("Orçamentos do vendedor")
-    st.dataframe(orc, use_container_width=True)
+    if not orc.empty:
+        orc["produtos"] = orc["produtos_json"].apply(produtos_resumo)
+        colunas_orc = ["cliente", "telefone", "codigo", "data", "valor_total", "status", "produtos"]
+        st.dataframe(orc[colunas_orc], use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhum orçamento encontrado para esta vendedora.")
 
     if clientes.empty:
         st.info("Essa vendedora ainda não tem clientes vinculados na base sincronizada.")
         return
 
-    cliente_id = st.selectbox("Cliente", clientes["id"].astype(str).tolist())
-    cliente = clientes[clientes["id"].astype(str) == cliente_id].iloc[0].to_dict()
+    opcoes_clientes = {
+        f"{r.get('nome_fantasia') or r.get('nome')} | {r.get('cnpj') or r.get('cpf') or r.get('id')}": r
+        for r in clientes.to_dict("records")
+    }
+    cliente_label = st.selectbox("Cliente", list(opcoes_clientes.keys()))
+    cliente = opcoes_clientes[cliente_label]
+    cliente_id = str(cliente["id"])
 
     texto = st.text_area("Observação compartilhada")
     if st.button("Salvar observação") and texto.strip():
