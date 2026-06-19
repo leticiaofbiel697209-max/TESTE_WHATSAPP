@@ -9,7 +9,7 @@ from services.db import (
 )
 from services.gestaoclick_api import sincronizar_dados, testar_conexao as testar_gestaoclick
 from services.openai_service import testar_conexao as testar_openai
-from services.watidy_api import testar_conexao as testar_watidy
+from services.watidy_api import diagnostico_configuracao, enviar_mensagem, testar_conexao as testar_watidy
 
 
 def _nomes_vendedoras_sincronizadas():
@@ -40,10 +40,24 @@ def render():
             st.error(str(e))
     if c3.button("Testar Watidy"):
         try:
+            st.json(diagnostico_configuracao())
             st.write(testar_watidy())
             st.success("Teste Watidy concluído.")
         except Exception as e:
             st.error(str(e))
+
+    with st.expander("Diagnóstico e envio de teste do Watidy", expanded=False):
+        st.caption("Use isto para confirmar a URL de envio antes de mandar mensagem para um cliente real.")
+        st.json(diagnostico_configuracao())
+        numero_teste = st.text_input("Número de teste", placeholder="5521999999999")
+        mensagem_teste = st.text_area("Mensagem de teste", value="Teste de integração Novaprint + Watidy.")
+        if st.button("Enviar teste pelo Watidy"):
+            try:
+                st.write(enviar_mensagem(numero_teste, mensagem_teste))
+                st.success("Mensagem de teste enviada.")
+            except Exception as e:
+                st.error(str(e))
+                st.info("Se aparecer 404 com 'Cannot POST', o token pode estar certo, mas a rota WATIDY_SEND_PATH está incorreta.")
 
     st.subheader("Sincronização GestãoClick")
     if st.button("Sincronizar dados reais agora"):
