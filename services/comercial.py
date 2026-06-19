@@ -1,3 +1,4 @@
+import ast
 import json
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
@@ -43,17 +44,69 @@ def telefone_cliente(row: Dict[str, Any]) -> str:
 def produtos_resumo(raw: Any, limite: int = 3) -> str:
     if not raw:
         return ""
-    try:
-        itens = json.loads(raw) if isinstance(raw, str) else raw
-    except json.JSONDecodeError:
-        return ""
+    itens = _parse_produtos(raw)
     nomes = []
-    for item in itens or []:
-        if isinstance(item, dict):
-            nome = item.get("nome") or item.get("descricao") or item.get("produto") or item.get("titulo")
-            if nome:
-                nomes.append(str(nome))
-    return ", ".join(nomes[:limite])
+    for item in itens:
+        nome = _nome_produto(item)
+        if not nome:
+            continue
+        qtd = item.get("quantidade") or item.get("qtde") or item.get("qtd")
+        valor = item.get("valor_total") or item.get("total") or item.get("valor_venda")
+        partes = [str(nome)]
+        if qtd:
+            partes.append(f"qtd {qtd}")
+        if valor:
+            partes.append(f"R$ {valor}")
+        nomes.append(" - ".join(partes))
+    return "; ".join(nomes[:limite])
+
+
+def _parse_valor(raw: Any) -> Any:
+    if isinstance(raw, (dict, list)):
+        return raw
+    if not isinstance(raw, str):
+        return raw
+    texto = raw.strip()
+    if not texto:
+        return None
+    try:
+        return json.loads(texto)
+    except Exception:
+        pass
+    try:
+        return ast.literal_eval(texto)
+    except Exception:
+        return raw
+
+
+def _parse_produtos(raw: Any) -> List[Dict[str, Any]]:
+    valor = _parse_valor(raw)
+    if isinstance(valor, dict):
+        valor = [valor]
+    produtos = []
+    for item in valor or []:
+        item = _parse_valor(item)
+        if not isinstance(item, dict):
+            continue
+        produto = _parse_valor(item.get("produto"))
+        if isinstance(produto, dict):
+            mesclado = {**produto, **{k: v for k, v in item.items() if k != "produto"}}
+            produtos.append(mesclado)
+        else:
+            produtos.append(item)
+    return produtos
+
+
+def _nome_produto(item: Dict[str, Any]) -> str:
+    return str(
+        item.get("nome_produto")
+        or item.get("nome")
+        or item.get("descricao")
+        or item.get("detalhes")
+        or item.get("produto_nome")
+        or item.get("titulo")
+        or ""
+    ).strip()
 
 
 def status_aberto(status: Any) -> bool:
@@ -61,7 +114,7 @@ def status_aberto(status: Any) -> bool:
     return not any(palavra in texto for palavra in STATUS_FECHADOS)
 
 
-def orcamentos_para_ligar(dias_minimos: int = 2, vendedor: Optional[str] = None) -> pd.DataFrame:
+def orcamentos_para_ligar(dias_minimos: int = 2, vendedor: Optional[str] = None, dias_maximos: int = 45) -> pd.DataFrame:
     query = """
         SELECT
             o.id,
@@ -87,7 +140,7 @@ def orcamentos_para_ligar(dias_minimos: int = 2, vendedor: Optional[str] = None)
     if vendedor:
         query += " WHERE COALESCE(NULLIF(o.vendedor, ''), c.vendedor)=?"
         params.append(vendedor)
-    query += " ORDER BY o.data DESC"
+    query += " ORDER BY o.data DESC LIMIT 2000"
 
     with get_connection() as conn:
         df = pd.read_sql_query(query, conn, params=params)
@@ -101,7 +154,7 @@ def orcamentos_para_ligar(dias_minimos: int = 2, vendedor: Optional[str] = None)
         if not data_orcamento:
             continue
         idade = (hoje - data_orcamento).days
-        if idade < dias_minimos or not status_aberto(row.get("status")):
+        if idade < dias_minimos or idade > dias_maximos or not status_aberto(row.get("status")):
             continue
         row["cliente"] = cliente_nome(row)
         row["telefone_contato"] = telefone_cliente(row)
@@ -119,12 +172,12 @@ def orcamentos_para_ligar(dias_minimos: int = 2, vendedor: Optional[str] = None)
 def compras_e_orcamentos_cliente(cliente_id: str) -> Dict[str, pd.DataFrame]:
     with get_connection() as conn:
         compras = pd.read_sql_query(
-            "SELECT * FROM vendas WHERE cliente_id=? ORDER BY data DESC",
+            "SELECT * FROM vendas WHERE cliente_id=? ORDER BY data DESC LIMIT 200",
             conn,
             params=(cliente_id,),
         )
         orcamentos = pd.read_sql_query(
-            "SELECT * FROM orcamentos WHERE cliente_id=? ORDER BY data DESC",
+            "SELECT * FROM orcamentos WHERE cliente_id=? ORDER BY data DESC LIMIT 200",
             conn,
             params=(cliente_id,),
         )
@@ -136,21 +189,31 @@ def compras_e_orcamentos_cliente(cliente_id: str) -> Dict[str, pd.DataFrame]:
 
 
 def texto_relatorio_vendedora(vendedor: str, df: pd.DataFrame) -> str:
+    total = float(df["valor_total"].fillna(0).sum()) if not df.empty else 0
+    clientes = int(df["cliente_id"].nunique()) if not df.empty else 0
     linhas = [
-        f"Bom dia, {vendedor}! Segue sua lista de clientes para ligar hoje:",
+        f"Bom dia, {vendedor}!",
+        "",
+        "RELATÓRIO COMERCIAL - FOLLOW-UP DE ORÇAMENTOS",
+        f"Clientes para ligar: {clientes}",
+        f"Orçamentos em aberto: {len(df)}",
+        f"Valor em negociação: R$ {total:,.2f}",
+        "",
+        "Prioridade de hoje:",
         "",
     ]
-    for idx, row in enumerate(df.to_dict("records"), start=1):
+    ordenado = df.sort_values(["valor_total", "idade_dias"], ascending=[False, False])
+    for idx, row in enumerate(ordenado.to_dict("records"), start=1):
         valor = float(row.get("valor_total") or 0)
         linhas.append(
-            f"{idx}. {row.get('cliente')} | {row.get('telefone_contato') or 'sem telefone'} | "
-            f"orcamento {row.get('codigo') or row.get('id')} | {row.get('idade_dias')} dias | "
-            f"R$ {valor:,.2f}"
+            f"{idx}. {row.get('cliente')} - R$ {valor:,.2f}"
         )
+        linhas.append(f"   Contato: {row.get('telefone_contato') or 'sem telefone'}")
+        linhas.append(f"   Orçamento: {row.get('codigo') or row.get('id')} | {row.get('idade_dias')} dias em aberto")
         if row.get("produtos"):
             linhas.append(f"   Produtos: {row.get('produtos')}")
     linhas.append("")
-    linhas.append("Registre o retorno no CRM depois do contato.")
+    linhas.append("Ação: ligar, registrar retorno no CRM e atualizar próximo passo.")
     return "\n".join(linhas)
 
 

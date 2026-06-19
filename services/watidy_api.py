@@ -1,6 +1,6 @@
 import os
 import re
-from typing import Dict, Optional
+from typing import Dict
 from urllib.parse import urljoin
 
 import requests
@@ -28,14 +28,26 @@ def normalizar_numero(numero: str) -> str:
 
 def endpoint_envio() -> str:
     base_url = _config("WATIDY_API_URL").strip()
-    endpoint = _config("WATIDY_SEND_PATH").strip()
+    token = _config("WATIDY_API_TOKEN").strip()
+    endpoint_config = _config("WATIDY_SEND_PATH").strip()
+    if endpoint_config:
+        endpoint = endpoint_config
+    elif "/api/enviar-texto" in base_url:
+        endpoint = "{token}"
+    else:
+        endpoint = "/api/enviar-texto/{token}"
     if not base_url:
         return ""
     if endpoint.startswith("http://") or endpoint.startswith("https://"):
-        return endpoint
-    if endpoint:
-        return urljoin(base_url.rstrip("/") + "/", endpoint.lstrip("/"))
-    return base_url
+        url = endpoint
+    else:
+        url = urljoin(base_url.rstrip("/") + "/", endpoint.lstrip("/"))
+    if "{token}" in url:
+        return url.replace("{token}", token)
+    token_no_caminho = _config("WATIDY_TOKEN_IN_PATH").lower() not in ("0", "false", "nao", "não", "no")
+    if token_no_caminho and token and not url.rstrip("/").endswith(token):
+        return f"{url.rstrip('/')}/{token}"
+    return url
 
 
 def _headers() -> Dict[str, str]:
@@ -45,7 +57,8 @@ def _headers() -> Dict[str, str]:
     if token_prefix == "":
         token_prefix = "Bearer"
     headers = {"Content-Type": "application/json"}
-    if token:
+    token_no_caminho = _config("WATIDY_TOKEN_IN_PATH").lower() not in ("0", "false", "nao", "não", "no")
+    if token and not token_no_caminho:
         headers[auth_header] = f"{token_prefix} {token}".strip()
     return headers
 
@@ -75,10 +88,11 @@ def _mensagem_erro(resp: requests.Response, url: str) -> str:
 def diagnostico_configuracao() -> Dict[str, str]:
     return {
         "url_de_envio_usada": endpoint_envio(),
-        "campo_numero": _config("WATIDY_NUMBER_FIELD") or "numero",
-        "campo_mensagem": _config("WATIDY_MESSAGE_FIELD") or "mensagem",
+        "campo_numero": _config("WATIDY_NUMBER_FIELD") or "phone",
+        "campo_mensagem": _config("WATIDY_MESSAGE_FIELD") or "message",
         "header_token": _config("WATIDY_AUTH_HEADER") or "Authorization",
         "prefixo_token": _config("WATIDY_TOKEN_PREFIX") or "Bearer",
+        "token_no_caminho": _config("WATIDY_TOKEN_IN_PATH") or "1",
     }
 
 
@@ -87,8 +101,7 @@ def testar_conexao() -> Dict[str, str]:
     token = _config("WATIDY_API_TOKEN")
     if not url or not token:
         raise RuntimeError("Configure WATIDY_API_URL e WATIDY_API_TOKEN.")
-    resp = requests.get(url, headers=_headers(), timeout=20)
-    return {"status_code": str(resp.status_code), "resposta": resp.text[:300]}
+    return {"ok": "true", "mensagem": "Configuração carregada. Use o envio de teste para validar a entrega.", "url_de_envio_usada": url}
 
 
 def enviar_mensagem(numero: str, mensagem: str) -> Dict[str, str]:
@@ -99,10 +112,12 @@ def enviar_mensagem(numero: str, mensagem: str) -> Dict[str, str]:
     if not numero or not mensagem:
         raise ValueError("Número e mensagem são obrigatórios.")
 
-    payload = {
-        _config("WATIDY_NUMBER_FIELD") or "numero": normalizar_numero(numero),
-        _config("WATIDY_MESSAGE_FIELD") or "mensagem": mensagem,
-    }
+    numero_normalizado = normalizar_numero(numero)
+    number_field = _config("WATIDY_NUMBER_FIELD") or "phone"
+    message_field = _config("WATIDY_MESSAGE_FIELD") or "message"
+    payload = {"phone": numero_normalizado, "message": mensagem}
+    payload[number_field] = numero_normalizado
+    payload[message_field] = mensagem
     resp = requests.post(url, json=payload, headers=_headers(), timeout=30)
     if not resp.ok:
         raise RuntimeError(_mensagem_erro(resp, url))
