@@ -128,6 +128,39 @@ def _json(value: Any) -> str:
     return json.dumps(value or [], ensure_ascii=False, default=str)
 
 
+def _nested_id(obj: Dict[str, Any], campo: str) -> str:
+    valor = obj.get(campo)
+    if isinstance(valor, dict):
+        return str(valor.get("id") or valor.get("codigo") or valor.get("cliente_id") or valor.get("id_cliente") or "").strip()
+    return str(valor or "").strip()
+
+
+def _cliente_id_origem(obj: Dict[str, Any]) -> str:
+    return (
+        str(obj.get("cliente_id") or obj.get("id_cliente") or obj.get("id_pessoa") or "").strip()
+        or _nested_id(obj, "cliente")
+        or _nested_id(obj, "pessoa")
+        or _nested_id(obj, "contato")
+    )
+
+
+def _vendedor_nome(obj: Dict[str, Any]) -> str:
+    vendedor = obj.get("vendedor")
+    if isinstance(vendedor, dict):
+        return str(vendedor.get("nome") or vendedor.get("name") or vendedor.get("apelido") or "").strip()
+    return str(vendedor or obj.get("vendedor_nome") or obj.get("nome_vendedor") or "").strip()
+
+
+def _salvar_cliente_embutido(obj: Dict[str, Any]):
+    for campo in ("cliente", "pessoa", "contato"):
+        cliente = obj.get(campo)
+        if isinstance(cliente, dict):
+            try:
+                salvar_cliente(cliente)
+            except Exception:
+                pass
+
+
 def salvar_cliente(cliente: Dict[str, Any]):
     cliente_id = str(cliente.get("id") or cliente.get("codigo") or cliente.get("cliente_id") or "").strip()
     if not cliente_id:
@@ -165,6 +198,7 @@ def salvar_venda(venda: Dict[str, Any]):
     venda_id = str(venda.get("id") or venda.get("codigo") or venda.get("numero") or "").strip()
     if not venda_id:
         raise ValueError("Venda sem ID retornada pelo GestãoClick.")
+    _salvar_cliente_embutido(venda)
     with get_connection() as conn:
         conn.execute("""
             INSERT INTO vendas (id, cliente_id, codigo, data, valor_total, status, vendedor, produtos_json)
@@ -179,12 +213,12 @@ def salvar_venda(venda: Dict[str, Any]):
                 produtos_json=excluded.produtos_json
         """, (
             venda_id,
-            str(venda.get("cliente_id") or venda.get("id_cliente") or venda.get("cliente", {}).get("id") or ""),
+            _cliente_id_origem(venda),
             venda.get("codigo") or venda.get("numero"),
             venda.get("data") or venda.get("data_venda") or venda.get("criado_em"),
             float(venda.get("valor_total") or venda.get("total") or 0),
             venda.get("status") or venda.get("situacao"),
-            venda.get("vendedor") or venda.get("vendedor_nome"),
+            _vendedor_nome(venda),
             _json(venda.get("produtos") or venda.get("itens")),
         ))
         conn.commit()
@@ -194,6 +228,7 @@ def salvar_orcamento(orcamento: Dict[str, Any]):
     orcamento_id = str(orcamento.get("id") or orcamento.get("codigo") or orcamento.get("numero") or "").strip()
     if not orcamento_id:
         raise ValueError("Orçamento sem ID retornado pelo GestãoClick.")
+    _salvar_cliente_embutido(orcamento)
     with get_connection() as conn:
         conn.execute("""
             INSERT INTO orcamentos (id, cliente_id, codigo, data, valor_total, status, vendedor, produtos_json, observacoes)
@@ -209,12 +244,12 @@ def salvar_orcamento(orcamento: Dict[str, Any]):
                 observacoes=excluded.observacoes
         """, (
             orcamento_id,
-            str(orcamento.get("cliente_id") or orcamento.get("id_cliente") or orcamento.get("cliente", {}).get("id") or ""),
+            _cliente_id_origem(orcamento),
             orcamento.get("codigo") or orcamento.get("numero"),
             orcamento.get("data") or orcamento.get("data_orcamento") or orcamento.get("criado_em"),
             float(orcamento.get("valor_total") or orcamento.get("total") or 0),
             orcamento.get("status") or orcamento.get("situacao"),
-            orcamento.get("vendedor") or orcamento.get("vendedor_nome"),
+            _vendedor_nome(orcamento),
             _json(orcamento.get("produtos") or orcamento.get("itens")),
             orcamento.get("observacoes") or orcamento.get("observacao"),
         ))
